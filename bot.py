@@ -5,6 +5,8 @@ from google.oauth2.service_account import Credentials
 import os
 import json
 from dotenv import load_dotenv
+from threading import Thread
+from http.server import HTTPServer, BaseHTTPRequestHandler
 
 load_dotenv()
 
@@ -18,6 +20,24 @@ SHEET_NAME        = os.getenv("SHEET_NAME", "Sheet1")
 COL_NAME       = 0   # Column A (0-indexed)
 COL_STUDENT_ID = 1   # Column B
 COL_ROLE_ID    = 2   # Column C
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── Dummy HTTP server so Render's Web Service doesn't kill the process ────────
+class HealthHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"Bot is running!")
+    def log_message(self, format, *args):
+        pass  # silence access logs
+
+def run_web_server():
+    port = int(os.getenv("PORT", 8080))
+    server = HTTPServer(("0.0.0.0", port), HealthHandler)
+    server.serve_forever()
+
+# Start web server in background thread
+Thread(target=run_web_server, daemon=True).start()
 # ─────────────────────────────────────────────────────────────────────────────
 
 def get_sheet():
@@ -37,9 +57,9 @@ def lookup_student(student_id: str):
     rows = sheet.get_all_values()
     for row in rows[1:]:   # skip header
         if len(row) >= 3:
-            name     = row[COL_NAME].strip()
-            sid      = row[COL_STUDENT_ID].strip()
-            role_id  = row[COL_ROLE_ID].strip()
+            name    = row[COL_NAME].strip()
+            sid     = row[COL_STUDENT_ID].strip()
+            role_id = row[COL_ROLE_ID].strip()
             if sid.lower() == student_id.strip().lower():
                 return name, role_id
     return None
@@ -85,7 +105,7 @@ async def verify(ctx: discord.ApplicationContext, student_id: str):
     try:
         await member.edit(nick=name)
     except discord.Forbidden:
-        pass  # can't rename server owner, that's okay
+        pass  # can't rename server owner
 
     # 3. Assign role from sheet
     role = guild.get_role(int(role_id)) if role_id.isdigit() else None
