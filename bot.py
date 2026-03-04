@@ -140,6 +140,11 @@ class WingSelect(discord.ui.Select):
             await interaction.followup.send("⚠️ Could not find the selected roles. Please contact an admin.")
             return
 
+        # Also assign the Verified User role
+        verified_user_role = guild.get_role(1478875840279482520)
+        if verified_user_role:
+            selected_roles.append(verified_user_role)
+
         await member.add_roles(*selected_roles)
 
         role_names = "\n".join(f"• **{r.name}**" for r in selected_roles)
