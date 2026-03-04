@@ -1,5 +1,4 @@
 import discord
-from discord import app_commands
 from discord.ext import commands
 import gspread
 from google.oauth2.service_account import Credentials
@@ -9,20 +8,18 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# ── Config ──────────────────────────────────────────────────────────────────
-DISCORD_TOKEN      = os.getenv("DISCORD_TOKEN")
-GOOGLE_CREDS_JSON  = os.getenv("GOOGLE_CREDS_JSON")   # full JSON string
-SPREADSHEET_ID     = os.getenv("SPREADSHEET_ID")
-SHEET_NAME         = os.getenv("SHEET_NAME", "Sheet1")
+# ── Config ───────────────────────────────────────────────────────────────────
+DISCORD_TOKEN     = os.getenv("DISCORD_TOKEN")
+GOOGLE_CREDS_JSON = os.getenv("GOOGLE_CREDS_JSON")
+SPREADSHEET_ID    = os.getenv("SPREADSHEET_ID")
+SHEET_NAME        = os.getenv("SHEET_NAME", "Sheet1")
 
-# Column positions (1-indexed) in your Google Sheet
-# A=Name, B=Student ID, C=Discord Role ID
-COL_NAME           = 1   # Column A
-COL_STUDENT_ID     = 2   # Column B
-COL_ROLE_ID        = 3   # Column C
-# ────────────────────────────────────────────────────────────────────────────
+# Sheet columns: A=Name, B=Student ID, C=Discord Role ID
+COL_NAME       = 0   # Column A (0-indexed)
+COL_STUDENT_ID = 1   # Column B
+COL_ROLE_ID    = 2   # Column C
+# ─────────────────────────────────────────────────────────────────────────────
 
-# Google Sheets setup
 def get_sheet():
     scopes = [
         "https://www.googleapis.com/auth/spreadsheets.readonly",
@@ -31,78 +28,70 @@ def get_sheet():
     creds_dict = json.loads(GOOGLE_CREDS_JSON)
     creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
     client = gspread.authorize(creds)
-    spreadsheet = client.open_by_key(SPREADSHEET_ID)
-    return spreadsheet.worksheet(SHEET_NAME)
+    return client.open_by_key(SPREADSHEET_ID).worksheet(SHEET_NAME)
 
 
 def lookup_student(student_id: str):
-    """Return (name, role_id) tuple if ID found, else None."""
+    """Return (name, role_id) if found, else None."""
     sheet = get_sheet()
-    records = sheet.get_all_values()
-    for row in records[1:]:  # skip header row
+    rows = sheet.get_all_values()
+    for row in rows[1:]:   # skip header
         if len(row) >= 3:
-            name     = str(row[COL_NAME - 1]).strip()
-            sheet_id = str(row[COL_STUDENT_ID - 1]).strip()
-            role_id  = str(row[COL_ROLE_ID - 1]).strip()
-            if sheet_id.lower() == student_id.strip().lower():
+            name     = row[COL_NAME].strip()
+            sid      = row[COL_STUDENT_ID].strip()
+            role_id  = row[COL_ROLE_ID].strip()
+            if sid.lower() == student_id.strip().lower():
                 return name, role_id
     return None
 
 
-# Bot setup
+# ── Bot ───────────────────────────────────────────────────────────────────────
 intents = discord.Intents.default()
 intents.members = True
-bot = commands.Bot(command_prefix="!", intents=intents)
-tree = bot.tree
+
+bot = commands.Bot(intents=intents)
 
 
 @bot.event
 async def on_ready():
-    await tree.sync()
-    print(f"✅  Logged in as {bot.user} — slash commands synced.")
+    print(f"✅ Logged in as {bot.user}")
 
 
-@tree.command(name="verify", description="Verify yourself with your student ID")
-@app_commands.describe(student_id="Enter your student ID")
-async def verify(interaction: discord.Interaction, student_id: str):
-    await interaction.response.defer(ephemeral=True)   # show "thinking…" only to user
+@bot.slash_command(name="verify", description="Verify yourself with your student ID")
+async def verify(ctx: discord.ApplicationContext, student_id: str):
+    await ctx.defer(ephemeral=True)
 
-    guild  = interaction.guild
-    member = interaction.user
+    guild  = ctx.guild
+    member = ctx.author
 
-    # ── 1. Look up student in Google Sheet ───────────────────────────────
+    # 1. Lookup in Google Sheet
     try:
         result = lookup_student(student_id)
     except Exception as e:
-        await interaction.followup.send(
-            "⚠️ Could not reach the student database right now. Please try again later.",
-            ephemeral=True,
-        )
+        await ctx.followup.send("⚠️ Could not reach the student database. Please try again later.", ephemeral=True)
         print(f"[Sheet error] {e}")
         return
 
     if result is None:
-        await interaction.followup.send(
-            f"❌ Student ID **{student_id}** was not found. "
-            "Please double-check your ID or contact an admin.",
+        await ctx.followup.send(
+            f"❌ Student ID **{student_id}** was not found.\nPlease double-check your ID or contact an admin.",
             ephemeral=True,
         )
         return
 
     name, role_id = result
 
-    # ── 2. Rename the member ──────────────────────────────────────────────
+    # 2. Rename member
     try:
         await member.edit(nick=name)
     except discord.Forbidden:
-        pass   # bot can't rename server owner — that's fine
+        pass  # can't rename server owner, that's okay
 
-    # ── 3. Give role from sheet (Column C = Discord Role ID) ─────────────
+    # 3. Assign role from sheet
     role = guild.get_role(int(role_id)) if role_id.isdigit() else None
     if role is None:
-        await interaction.followup.send(
-            f"⚠️ Could not find the role for your student ID (Role ID: `{role_id}`). "
-            "Please contact an admin.",
+        await ctx.followup.send(
+            f"⚠️ Role ID `{role_id}` not found on this server. Please contact an admin.",
             ephemeral=True,
         )
         return
@@ -110,13 +99,10 @@ async def verify(interaction: discord.Interaction, student_id: str):
     try:
         await member.add_roles(role)
     except discord.Forbidden:
-        await interaction.followup.send(
-            "⚠️ I don't have permission to assign roles. Please contact an admin.",
-            ephemeral=True,
-        )
+        await ctx.followup.send("⚠️ I don't have permission to assign roles. Please contact an admin.", ephemeral=True)
         return
 
-    # ── 4. Success message ────────────────────────────────────────────────
+    # 4. Success embed
     embed = discord.Embed(
         title="✅ Verification Successful!",
         description=(
@@ -128,7 +114,7 @@ async def verify(interaction: discord.Interaction, student_id: str):
         color=discord.Color.green(),
     )
     embed.set_footer(text=f"Verified with Student ID: {student_id}")
-    await interaction.followup.send(embed=embed, ephemeral=True)
+    await ctx.followup.send(embed=embed, ephemeral=True)
     print(f"[Verified] {member} → {name} | Role: {role.name} (ID: {student_id})")
 
 
