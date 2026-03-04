@@ -1,0 +1,22 @@
+services:
+  - type: worker          # background process — no HTTP port needed
+    name: discord-verify-bot
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python bot.py
+    plan: free
+    envVars:
+      - key: DISCORD_TOKEN
+        sync: false       # set manually in Render dashboard
+      - key: GOOGLE_CREDS_JSON
+        sync: false
+      - key: SPREADSHEET_ID
+        sync: false
+      - key: SHEET_NAME
+        value: Sheet1
+      - key: COL_STUDENT_ID
+        value: "1"
+      - key: COL_NAME
+        value: "2"
+      - key: VERIFIED_ROLE_NAME
+        value: Verified
