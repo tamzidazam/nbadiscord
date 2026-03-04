@@ -34,12 +34,17 @@ A Discord bot that lets students type `/verify <student_id>` and instantly:
    - Click **Share** → paste the service account email (looks like `name@project.iam.gserviceaccount.com`) → give **Viewer** access
 
 ### Sheet format
-| Column A (Student ID) | Column B (Name) |
-|-----------------------|-----------------|
-| 12345                 | Ahmed Khan      |
-| 67890                 | Sara Malik      |
+| Column A (Name) | Column B (Student ID) | Column C (Discord Role ID) |
+|-----------------|----------------------|---------------------------|
+| Ahmed Khan      | 12345                | 123456789012345678         |
+| Sara Malik      | 67890                | 987654321098765432         |
 
 Row 1 can be a header row — the bot skips it automatically.
+
+**How to get a Discord Role ID:**
+1. In Discord → Server Settings → Roles
+2. Right-click the role → **Copy Role ID**
+   *(You need Developer Mode on: User Settings → Advanced → Developer Mode)*
 
 ---
 

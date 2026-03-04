@@ -16,10 +16,10 @@ SPREADSHEET_ID     = os.getenv("SPREADSHEET_ID")
 SHEET_NAME         = os.getenv("SHEET_NAME", "Sheet1")
 
 # Column positions (1-indexed) in your Google Sheet
-COL_STUDENT_ID     = int(os.getenv("COL_STUDENT_ID", "1"))   # e.g. column A
-COL_NAME           = int(os.getenv("COL_NAME", "2"))          # e.g. column B
-
-VERIFIED_ROLE_NAME = os.getenv("VERIFIED_ROLE_NAME", "Verified")
+# A=Name, B=Student ID, C=Discord Role ID
+COL_NAME           = 1   # Column A
+COL_STUDENT_ID     = 2   # Column B
+COL_ROLE_ID        = 3   # Column C
 # ────────────────────────────────────────────────────────────────────────────
 
 # Google Sheets setup
@@ -36,15 +36,16 @@ def get_sheet():
 
 
 def lookup_student(student_id: str):
-    """Return student name if ID found, else None."""
+    """Return (name, role_id) tuple if ID found, else None."""
     sheet = get_sheet()
     records = sheet.get_all_values()
     for row in records[1:]:  # skip header row
-        if len(row) >= 2:
-            sheet_id = str(row[COL_STUDENT_ID - 1]).strip()
+        if len(row) >= 3:
             name     = str(row[COL_NAME - 1]).strip()
+            sheet_id = str(row[COL_STUDENT_ID - 1]).strip()
+            role_id  = str(row[COL_ROLE_ID - 1]).strip()
             if sheet_id.lower() == student_id.strip().lower():
-                return name
+                return name, role_id
     return None
 
 
@@ -71,7 +72,7 @@ async def verify(interaction: discord.Interaction, student_id: str):
 
     # ── 1. Look up student in Google Sheet ───────────────────────────────
     try:
-        name = lookup_student(student_id)
+        result = lookup_student(student_id)
     except Exception as e:
         await interaction.followup.send(
             "⚠️ Could not reach the student database right now. Please try again later.",
@@ -80,7 +81,7 @@ async def verify(interaction: discord.Interaction, student_id: str):
         print(f"[Sheet error] {e}")
         return
 
-    if name is None:
+    if result is None:
         await interaction.followup.send(
             f"❌ Student ID **{student_id}** was not found. "
             "Please double-check your ID or contact an admin.",
@@ -88,18 +89,20 @@ async def verify(interaction: discord.Interaction, student_id: str):
         )
         return
 
+    name, role_id = result
+
     # ── 2. Rename the member ──────────────────────────────────────────────
     try:
         await member.edit(nick=name)
     except discord.Forbidden:
         pass   # bot can't rename server owner — that's fine
 
-    # ── 3. Give Verified role ─────────────────────────────────────────────
-    role = discord.utils.get(guild.roles, name=VERIFIED_ROLE_NAME)
+    # ── 3. Give role from sheet (Column C = Discord Role ID) ─────────────
+    role = guild.get_role(int(role_id)) if role_id.isdigit() else None
     if role is None:
         await interaction.followup.send(
-            f"⚠️ Role **{VERIFIED_ROLE_NAME}** not found on this server. "
-            "Please ask an admin to create it.",
+            f"⚠️ Could not find the role for your student ID (Role ID: `{role_id}`). "
+            "Please contact an admin.",
             ephemeral=True,
         )
         return
@@ -119,14 +122,14 @@ async def verify(interaction: discord.Interaction, student_id: str):
         description=(
             f"Welcome, **{name}**!\n\n"
             f"• Your nickname has been set to **{name}**\n"
-            f"• You've been given the **{VERIFIED_ROLE_NAME}** role\n\n"
+            f"• You've been given the **{role.name}** role\n\n"
             "You now have access to all student channels. Enjoy! 🎉"
         ),
         color=discord.Color.green(),
     )
     embed.set_footer(text=f"Verified with Student ID: {student_id}")
     await interaction.followup.send(embed=embed, ephemeral=True)
-    print(f"[Verified] {member} → {name} (ID: {student_id})")
+    print(f"[Verified] {member} → {name} | Role: {role.name} (ID: {student_id})")
 
 
 bot.run(DISCORD_TOKEN)
