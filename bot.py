@@ -242,17 +242,21 @@ async def on_message(message: discord.Message):
     # ── Mark this student ID as claimed ──────────────────────────────────
     claimed_ids[student_id] = member.id
 
-    # ── Success DM ───────────────────────────────────────────────────────
-    await dm(member, embed=discord.Embed(
-        title="✅ Verification Successful!",
-        description=(
-            f"Welcome, **{name}**!\n\n"
-            f"• Your nickname has been set to **{new_nick}**\n"
-            f"• You've been given the **{role.name}** role\n\n"
-            "You now have access to all student channels. Enjoy! 🎉"
-        ),
-        color=discord.Color.green(),
-    ).set_footer(text=f"Verified with Student ID: {student_id}"))
+    # ── Success message in verify channel (auto-deletes after 24 hours) ──
+    ch = guild.get_channel(VERIFY_CHANNEL_ID)
+    if ch:
+        embed = discord.Embed(
+            title="✅ Verification Successful!",
+            description=(
+                f"Welcome, **{name}**!\n\n"
+                f"• Nickname set to **{new_nick}**\n"
+                f"• Role assigned: **{role.name}**\n\n"
+                "You now have access to all student channels. Enjoy! 🎉"
+            ),
+            color=discord.Color.green(),
+        )
+        embed.set_footer(text=f"Verified with Student ID: {student_id}")
+        await ch.send(embed=embed, delete_after=86400)
 
     # ── Admin log ────────────────────────────────────────────────────────
     await log_to_admin(guild, embed=discord.Embed(
