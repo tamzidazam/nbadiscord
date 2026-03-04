@@ -147,13 +147,19 @@ class WingSelect(discord.ui.Select):
 
         await member.add_roles(*selected_roles)
 
-        role_names = "\n".join(f"• **{r.name}**" for r in selected_roles)
+        role_names = "\n".join(f"• **{r.name}**" for r in selected_roles if r.id != 1478875840279482520)
+
+        # Get the user's verification role (EB, TL, SM, GM, etc.) — exclude wing roles and Verified User
+        wing_role_ids_set = {rid for _, rid in WING_ROLES} | {1478875840279482520}
+        verify_role = next((r for r in member.roles if r.id not in wing_role_ids_set and r.name != "@everyone"), None)
+        verify_role_text = f"\n• **{verify_role.name}**" if verify_role else ""
 
         # Update the message to show selection is done
         embed = discord.Embed(
             title="🎉 Wings Selected!",
             description=(
                 f"{member.mention} has joined:\n{role_names}\n\n"
+                f"**Your Role:**{verify_role_text}\n\n"
                 "Welcome to your teams. Let's get to work! 💪"
             ),
             color=discord.Color.blurple(),
