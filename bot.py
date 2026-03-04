@@ -113,21 +113,15 @@ class WingSelect(discord.ui.Select):
         super().__init__(
             placeholder="🏷️ Choose your departmental wing...",
             min_values=1,
-            max_values=1,
+            max_values=3,
             options=options,
         )
 
     async def callback(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=False)
 
-        role_id = int(self.values[0])
         guild   = interaction.guild
         member  = interaction.user
-        role    = guild.get_role(role_id)
-
-        if role is None:
-            await interaction.followup.send("⚠️ Could not find that role. Please contact an admin.", ephemeral=False)
-            return
 
         # Remove any previously selected wing roles first
         wing_role_ids = {rid for _, rid in WING_ROLES}
@@ -135,22 +129,35 @@ class WingSelect(discord.ui.Select):
         if roles_to_remove:
             await member.remove_roles(*roles_to_remove)
 
-        await member.add_roles(role)
+        # Assign all selected roles
+        selected_roles = []
+        for value in self.values:
+            role = guild.get_role(int(value))
+            if role:
+                selected_roles.append(role)
+
+        if not selected_roles:
+            await interaction.followup.send("⚠️ Could not find the selected roles. Please contact an admin.")
+            return
+
+        await member.add_roles(*selected_roles)
+
+        role_names = "\n".join(f"• **{r.name}**" for r in selected_roles)
 
         # Update the message to show selection is done
         embed = discord.Embed(
-            title="🎉 Wing Selected!",
+            title="🎉 Wings Selected!",
             description=(
-                f"{member.mention} has joined **{role.name}**!\n\n"
-                "Welcome to your team. Let's get to work! 💪"
+                f"{member.mention} has joined:\n{role_names}\n\n"
+                "Welcome to your teams. Let's get to work! 💪"
             ),
             color=discord.Color.blurple(),
         )
         await interaction.edit_original_response(embed=embed, view=None)
 
         await log_to_admin(guild, embed=discord.Embed(
-            title="🏷️ Wing Assigned",
-            description=f"{member.mention} (`{member}`) selected **{role.name}**",
+            title="🏷️ Wings Assigned",
+            description=f"{member.mention} (`{member}`) selected:\n{role_names}",
             color=discord.Color.blurple(),
         ))
 
