@@ -129,7 +129,7 @@ async def on_message(message: discord.Message):
     if member_role_ids & verify_role_ids:
         await message.channel.send(
             f"{member.mention} ⚠️ You have already been verified. Contact an admin if you need help.",
-            delete_after=8,
+            
         )
         return
 
@@ -139,7 +139,7 @@ async def on_message(message: discord.Message):
     except Exception as e:
         await message.channel.send(
             f"{member.mention} ⚠️ Could not reach the student database. Please try again later.",
-            delete_after=8,
+            
         )
         print(f"[Sheet error] {e}")
         return
@@ -148,7 +148,7 @@ async def on_message(message: discord.Message):
         await message.channel.send(
             f"{member.mention} ❌ Student ID **{student_id}** was not found. "
             "Please double-check your ID or contact an admin.",
-            delete_after=8,
+            
         )
         return
 
@@ -166,7 +166,7 @@ async def on_message(message: discord.Message):
     if role is None:
         await message.channel.send(
             f"{member.mention} ⚠️ Role ID `{role_id}` not found. Please contact an admin.",
-            delete_after=8,
+            
         )
         return
 
@@ -175,7 +175,7 @@ async def on_message(message: discord.Message):
     except discord.Forbidden:
         await message.channel.send(
             f"{member.mention} ⚠️ I don't have permission to assign roles. Please contact an admin.",
-            delete_after=8,
+            
         )
         return
 
