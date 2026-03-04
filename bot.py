@@ -16,7 +16,7 @@ GOOGLE_CREDS_JSON = os.getenv("GOOGLE_CREDS_JSON")
 SPREADSHEET_ID    = os.getenv("SPREADSHEET_ID")
 SHEET_NAME        = os.getenv("SHEET_NAME", "Sheet1")
 
-VERIFY_CHANNEL_ID = 1478274143714672840  # only listen in this channel
+VERIFY_CHANNEL_ID = 1478274143714672840
 
 # Sheet columns: A=Name, B=Student ID, C=Discord Role ID
 COL_NAME       = 0
@@ -69,9 +69,26 @@ def lookup_student(student_id: str):
 # ── Bot ───────────────────────────────────────────────────────────────────────
 intents = discord.Intents.default()
 intents.members = True
-intents.message_content = True  # needed to read message content
+intents.message_content = True
 
 bot = commands.Bot(intents=intents)
+
+# All role IDs ever assigned by this bot (loaded from sheet at runtime)
+_known_role_ids: set[int] = set()
+
+async def get_all_verify_role_ids(guild: discord.Guild) -> set[int]:
+    """Fetch all unique role IDs from the sheet so we can detect already-verified users."""
+    global _known_role_ids
+    if _known_role_ids:
+        return _known_role_ids
+    try:
+        rows = get_sheet().get_all_values()
+        for row in rows[1:]:
+            if len(row) >= 3 and row[COL_ROLE_ID].strip().isdigit():
+                _known_role_ids.add(int(row[COL_ROLE_ID].strip()))
+    except Exception:
+        pass
+    return _known_role_ids
 
 
 @bot.event
@@ -81,27 +98,40 @@ async def on_ready():
 
 @bot.event
 async def on_message(message: discord.Message):
-    # Ignore bots and messages outside the verify channel
     if message.author.bot:
         return
     if message.channel.id != VERIFY_CHANNEL_ID:
         return
 
-    # Only process if message is purely an integer
     content = message.content.strip()
+
+    # Delete anything that isn't a pure integer
     if not content.isdigit():
-        await message.delete()
+        try:
+            await message.delete()
+        except discord.Forbidden:
+            pass
         return
 
     student_id = content
     member = message.author
-    guild = message.guild
+    guild  = message.guild
 
-    # Delete the message so ID isn't visible in chat
+    # Delete the user's message so the ID isn't visible
     try:
         await message.delete()
     except discord.Forbidden:
         pass
+
+    # ── Check if already verified (role-based — survives bot restarts) ───
+    verify_role_ids = await get_all_verify_role_ids(guild)
+    member_role_ids = {r.id for r in member.roles}
+    if member_role_ids & verify_role_ids:
+        await message.channel.send(
+            f"{member.mention} ⚠️ You have already been verified. Contact an admin if you need help.",
+            delete_after=8,
+        )
+        return
 
     # 1. Lookup in Google Sheet
     try:
@@ -129,7 +159,7 @@ async def on_message(message: discord.Message):
     try:
         await member.edit(nick=new_nick)
     except discord.Forbidden:
-        pass  # can't rename server owner
+        pass
 
     # 3. Assign role from sheet
     role = guild.get_role(int(role_id)) if role_id.isdigit() else None
@@ -149,7 +179,7 @@ async def on_message(message: discord.Message):
         )
         return
 
-    # 4. Success embed (auto-deletes after 10 seconds)
+    # 4. Success embed (permanent)
     embed = discord.Embed(
         title="✅ Verification Successful!",
         description=(
@@ -161,7 +191,7 @@ async def on_message(message: discord.Message):
         color=discord.Color.green(),
     )
     embed.set_footer(text=f"Verified with Student ID: {student_id}")
-    await message.channel.send(embed=embed, delete_after=10)
+    await message.channel.send(embed=embed)
     print(f"[Verified] {member} → {new_nick} | Role: {role.name}")
 
 
