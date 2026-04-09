@@ -119,7 +119,10 @@ async def send_admin(guild: discord.Guild, embed: discord.Embed):
     if ADMIN_LOG_CHANNEL_ID:
         log_ch = guild.get_channel(ADMIN_LOG_CHANNEL_ID)
         if log_ch:
-            await log_ch.send(embed=embed)
+            try:
+                await log_ch.send(embed=embed)
+            except discord.Forbidden:
+                print(f"[Admin log] Missing access to channel {ADMIN_LOG_CHANNEL_ID}. Give the bot Send Messages permission there.")
 
 
 async def notify(ch: discord.TextChannel, guild: discord.Guild, embed: discord.Embed, admin_embed: discord.Embed = None):
@@ -234,7 +237,11 @@ async def on_message(message: discord.Message):
     name, role_ids = result
 
     # ── Rename member: Name - ID ──────────────────────────────────────────
+    # Discord nickname limit is 32 characters
     new_nick = f"{name} - {student_id}"
+    if len(new_nick) > 32:
+        max_name_len = 32 - len(student_id) - 3  # 3 = " - "
+        new_nick = f"{name[:max_name_len]} - {student_id}"
     try:
         await member.edit(nick=new_nick)
     except discord.Forbidden:
